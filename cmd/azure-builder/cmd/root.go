@@ -24,7 +24,8 @@ needed for particular managed services that serve applications.
 }
 
 var (
-	aksRegion string
+	aksRegion            string
+	azureCredentialsPath string
 )
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -38,6 +39,4 @@ func Execute() {
 
 func init() {
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-	rootCmd.PersistentFlags().StringVarP(&aksRegion, "aks-region", "r", "",
-		"Azure region to create resources in")
 }
