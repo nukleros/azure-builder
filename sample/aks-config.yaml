@@ -1,2 +1,3 @@
-name: sample-cluster-threeport
-region: "West US"
+Name: sample-cluster-threeport
+ResourceGroup: sample-threeport-group
+Region: "West US"

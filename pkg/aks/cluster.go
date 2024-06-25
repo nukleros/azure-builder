@@ -10,24 +10,28 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v2"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources"
 	"github.com/nukleros/azure-builder/pkg/config"
+	resourcegroup "github.com/nukleros/azure-builder/pkg/resource-group"
 )
 
 func CreateAksCluster(
-	aksConfig *config.AksConfig,
+	aksConfig *config.AzureResourceConfig,
 	credentialsConfig *config.AzureCredentialsConfig,
 ) (*armcontainerservice.ManagedCluster, error) {
+	if err := credentialsConfig.ValidateNotNull(); err != nil {
+		return nil, fmt.Errorf("could not validate credentials config: %w", err)
+	}
+
 	ctx := context.Background()
 
-	resourceGroup, err := createResourceGroup(aksConfig, credentialsConfig, ctx)
+	resourceGroup, err := resourcegroup.CreateResourceGroup(aksConfig, credentialsConfig, ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not create the resource group: %w", err)
 	}
 
 	log.Println("created resource group id:", *resourceGroup.ID)
 
-	managedCluster, err := createManagedCluster(aksConfig, credentialsConfig, ctx)
+	managedCluster, err := createManagedCluster(ctx, aksConfig, credentialsConfig)
 	if err != nil {
 		return nil, fmt.Errorf("could not create managed aks cluster: %w", err)
 	}
@@ -36,20 +40,45 @@ func CreateAksCluster(
 	return managedCluster, nil
 }
 
-func createManagedCluster(
-	aksConfig *config.AksConfig,
-	credentialsConfig *config.AzureCredentialsConfig,
+func GetAksCluster(
 	ctx context.Context,
+	aksConfig *config.AzureResourceConfig,
+	credentialsConfig *config.AzureCredentialsConfig,
 ) (*armcontainerservice.ManagedCluster, error) {
-	resourceGroupName := getResourceGroupNameForCluster(*aksConfig.Name)
-	managedClustersClient, err := credentialsConfig.CreateAzureManagedClustersClient(resourceGroupName)
+	if err := credentialsConfig.ValidateNotNull(); err != nil {
+		return nil, fmt.Errorf("could not validate credentials config: %w", err)
+	}
+
+	managedClustersClient, err := credentialsConfig.CreateAzureManagedClustersClient(*aksConfig.ResourceGroup)
 	if err != nil {
-		fmt.Errorf("could not create managed clusters client from credentials config: %w", err)
+		return nil, fmt.Errorf("could not create managed clusters client from credentials config: %w", err)
+	}
+
+	clusterResponse, err := managedClustersClient.Get(ctx, *aksConfig.ResourceGroup, *aksConfig.Name, nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not get managed cluster %s: %w", *aksConfig.Name, err)
+	}
+
+	return &clusterResponse.ManagedCluster, nil
+}
+
+func createManagedCluster(
+	ctx context.Context,
+	aksConfig *config.AzureResourceConfig,
+	credentialsConfig *config.AzureCredentialsConfig,
+) (*armcontainerservice.ManagedCluster, error) {
+	if err := credentialsConfig.ValidateNotNull(); err != nil {
+		return nil, fmt.Errorf("could not validate credentials config: %w", err)
+	}
+
+	managedClustersClient, err := credentialsConfig.CreateAzureManagedClustersClient(*aksConfig.ResourceGroup)
+	if err != nil {
+		return nil, fmt.Errorf("could not create managed clusters client from credentials config: %w", err)
 	}
 
 	pollerResp, err := managedClustersClient.BeginCreateOrUpdate(
 		ctx,
-		resourceGroupName,
+		*aksConfig.ResourceGroup,
 		*aksConfig.Name,
 		armcontainerservice.ManagedCluster{
 			Location: aksConfig.Region,
@@ -89,18 +118,21 @@ func createManagedCluster(
 }
 
 func GetKubeConfigForCluster(
-	aksConfig *config.AksConfig,
-	credentialsConfig *config.AzureCredentialsConfig,
 	ctx context.Context,
+	aksConfig *config.AzureResourceConfig,
+	credentialsConfig *config.AzureCredentialsConfig,
 ) ([]byte, error) {
-	resourceGroupName := getResourceGroupNameForCluster(*aksConfig.Name)
-	managedClustersClient, err := credentialsConfig.CreateAzureManagedClustersClient(resourceGroupName)
+	if err := credentialsConfig.ValidateNotNull(); err != nil {
+		return nil, fmt.Errorf("could not validate credentials config: %w", err)
+	}
+
+	managedClustersClient, err := credentialsConfig.CreateAzureManagedClustersClient(*aksConfig.ResourceGroup)
 	if err != nil {
-		fmt.Errorf("could not create managed clusters client from credentials config: %w", err)
+		return nil, fmt.Errorf("could not create managed clusters client from credentials config: %w", err)
 	}
 
 	// get kubeconfig for the cluster
-	adminClusterCredentials, err := managedClustersClient.ListClusterAdminCredentials(ctx, resourceGroupName, *aksConfig.Name, nil)
+	adminClusterCredentials, err := managedClustersClient.ListClusterAdminCredentials(ctx, *aksConfig.ResourceGroup, *aksConfig.Name, nil)
 	if err != nil {
 		return nil, fmt.Errorf("could not list cluster credentials: %w", err)
 	}
@@ -112,69 +144,21 @@ func GetKubeConfigForCluster(
 	return adminClusterCredentials.Kubeconfigs[0].Value, nil
 }
 
-func createResourceGroup(
-	aksConfig *config.AksConfig,
-	credentialsConfig *config.AzureCredentialsConfig,
-	ctx context.Context,
-) (*armresources.ResourceGroup, error) {
-	resourceGroupClient, err := credentialsConfig.CreateAzureResourceGroupsClient()
-	if err != nil {
-		return nil, fmt.Errorf("could not create resource groups client from credentials config: %w", err)
-	}
-
-	resourceGroupName := getResourceGroupNameForCluster(*aksConfig.Name)
-	resourceGroupResp, err := resourceGroupClient.CreateOrUpdate(
-		ctx,
-		resourceGroupName,
-		armresources.ResourceGroup{
-			Location: aksConfig.Region,
-		},
-		nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to run CreateOrUpdate: %w", err)
-	}
-
-	return &resourceGroupResp.ResourceGroup, nil
-}
-
 func DeleteAksCluster(
-	aksConfig *config.AksConfig,
+	aksConfig *config.AzureResourceConfig,
 	credentialsConfig *config.AzureCredentialsConfig,
 ) error {
-	ctx := context.Background()
+	if err := credentialsConfig.ValidateNotNull(); err != nil {
+		return fmt.Errorf("could not validate credentials config: %w", err)
+	}
+
+	ctx := context.TODO()
 
 	// delete the entire resource group that was provisioned for the cluster, this ensures that azure handles all the
 	// individual resources the correspond the to the aks cluster deployment
-	if err := cleanupResourceGroup(aksConfig, credentialsConfig, ctx); err != nil {
+	if err := resourcegroup.CleanupResourceGroup(aksConfig, credentialsConfig, ctx); err != nil {
 		return fmt.Errorf("could not clean up resource group for the aks cluster: %w", err)
 	}
-
-	return nil
-}
-
-func cleanupResourceGroup(
-	aksConfig *config.AksConfig,
-	credentialsConfig *config.AzureCredentialsConfig,
-	ctx context.Context,
-) error {
-	resourceGroupClient, err := credentialsConfig.CreateAzureResourceGroupsClient()
-	if err != nil {
-		return fmt.Errorf("could not create resource groups client from credentials config: %w", err)
-	}
-
-	resourceGroupName := getResourceGroupNameForCluster(*aksConfig.Name)
-	log.Println("deleting associated resource groups...")
-	pollerResp, err := resourceGroupClient.BeginDelete(ctx, resourceGroupName, nil)
-	if err != nil {
-		return fmt.Errorf("failed to run being deletion of resourceGroup %s: %w", resourceGroupName, err)
-	}
-
-	_, err = pollerResp.PollUntilDone(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to poll for completion response on delete resource group %s: %w", resourceGroupName, err)
-	}
-
-	log.Println(fmt.Sprintf("deleted resource group %s", resourceGroupName))
 
 	return nil
 }

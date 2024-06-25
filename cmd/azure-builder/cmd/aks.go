@@ -34,23 +34,15 @@ var createAksCmd = &cobra.Command{
 			return fmt.Errorf("could not JSON unmarshal credentials config: %w", err)
 		}
 
-		if err = credentialsConfig.ValidateNotNull(); err != nil {
-			return fmt.Errorf("could not validate credentials config: %w", err)
-		}
-
 		// Load aks config file used to create the cluster
 		aksConfigBytes, err := os.ReadFile(aksConfigPath)
 		if err != nil {
 			return fmt.Errorf("could not read aks config file: %w", err)
 		}
 
-		var aksConfig config.AksConfig
+		var aksConfig config.AzureResourceConfig
 		if err = yaml.Unmarshal(aksConfigBytes, &aksConfig); err != nil {
 			return fmt.Errorf("could not YAML unmarshal aks config: %w", err)
-		}
-
-		if err = aksConfig.ValidateNotNull(); err != nil {
-			return fmt.Errorf("could not validate aks config: %w", err)
 		}
 
 		// Create cluster
@@ -90,23 +82,15 @@ var deleteAksCmd = &cobra.Command{
 			return fmt.Errorf("could not JSON unmarshall credentials config: %w", err)
 		}
 
-		if err = credentialsConfig.ValidateNotNull(); err != nil {
-			return fmt.Errorf("could not validate credentials config: %w", err)
-		}
-
 		// Load aks config file used to create the cluster
 		aksConfigBytes, err := os.ReadFile(aksConfigPath)
 		if err != nil {
 			return fmt.Errorf("could not read aks config file: %w", err)
 		}
 
-		var aksConfig config.AksConfig
+		var aksConfig config.AzureResourceConfig
 		if err = yaml.Unmarshal(aksConfigBytes, &aksConfig); err != nil {
 			return fmt.Errorf("could not YAML unmarshal aks config: %w", err)
-		}
-
-		if err = aksConfig.ValidateNotNull(); err != nil {
-			return fmt.Errorf("could not validate aks config: %w", err)
 		}
 
 		// Delete aks cluster

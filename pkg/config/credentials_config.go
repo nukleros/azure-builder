@@ -6,6 +6,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v2"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/sql/armsql"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage"
 )
 
 type AzureCredentialsConfig struct {
@@ -31,6 +33,10 @@ func (config *AzureCredentialsConfig) ValidateNotNull() error {
 }
 
 func (config *AzureCredentialsConfig) CreateAzureResourceGroupsClient() (*armresources.ResourceGroupsClient, error) {
+	if err := config.ValidateNotNull(); err != nil {
+		return nil, fmt.Errorf("could not validate credentials config: %w", err)
+	}
+
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
 		return nil, fmt.Errorf("could not create default azure credentials: %w", err)
@@ -46,6 +52,10 @@ func (config *AzureCredentialsConfig) CreateAzureResourceGroupsClient() (*armres
 }
 
 func (config *AzureCredentialsConfig) CreateAzureManagedClustersClient(resourceGroupName string) (*armcontainerservice.ManagedClustersClient, error) {
+	if err := config.ValidateNotNull(); err != nil {
+		return nil, fmt.Errorf("could not validate credentials config: %w", err)
+	}
+
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
 		return nil, fmt.Errorf("could not create default azure credentials: %w", err)
@@ -57,4 +67,62 @@ func (config *AzureCredentialsConfig) CreateAzureManagedClustersClient(resourceG
 	}
 	managedClustersClient := containerserviceClientFactory.NewManagedClustersClient()
 	return managedClustersClient, nil
+}
+
+func (config *AzureCredentialsConfig) CreateAzureSqlDatabaseClient() (*armsql.DatabasesClient, error) {
+	if err := config.ValidateNotNull(); err != nil {
+		return nil, fmt.Errorf("could not validate credentials config: %w", err)
+	}
+
+	cred, err := azidentity.NewDefaultAzureCredential(nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not create default azure credentials: %w", err)
+	}
+
+	sqlClientFactory, err := armsql.NewClientFactory(*config.SubscriptionID, cred, nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not create new sql client: %w", err)
+	}
+
+	databasesClient := sqlClientFactory.NewDatabasesClient()
+	return databasesClient, nil
+}
+
+func (config *AzureCredentialsConfig) CreateAzureSqlServersClient() (*armsql.ServersClient, error) {
+	if err := config.ValidateNotNull(); err != nil {
+		return nil, fmt.Errorf("could not validate credentials config: %w", err)
+	}
+
+	cred, err := azidentity.NewDefaultAzureCredential(nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not create default azure credentials: %w", err)
+	}
+
+	sqlClientFactory, err := armsql.NewClientFactory(*config.SubscriptionID, cred, nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not create new client factory: %w", err)
+	}
+
+	serversClient := sqlClientFactory.NewServersClient()
+	return serversClient, nil
+}
+
+func (config *AzureCredentialsConfig) CreateStorageAccountsClient() (*armstorage.AccountsClient, error) {
+	if err := config.ValidateNotNull(); err != nil {
+		return nil, fmt.Errorf("could not validate credentials config: %w", err)
+	}
+
+	cred, err := azidentity.NewDefaultAzureCredential(nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not create default azure credentials: %w", err)
+	}
+
+	storageClientFactory, err := armstorage.NewClientFactory(*config.SubscriptionID, cred, nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not create new client factory: %w", err)
+	}
+
+	accountsClient := storageClientFactory.NewAccountsClient()
+
+	return accountsClient, nil
 }
